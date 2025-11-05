@@ -3,9 +3,10 @@
 #include <armadillo>
 #include "formats/matrix_formats.hpp"
 #include "formats/cuda_matrix_formats.cuh"
+#include "utils/cuda_matrix_utils.cuh"
 
 // Forward declarations
-CSRMatrix lanczos_cpu_reference(const CSRMatrix& input, double scale_x, double scale_y, double threshold);
+CSRMatrix lanczos_cpu_reference(const CSRMatrix& input, double scale_x, double scale_y, int a, double threshold);
 
 int main() {
     std::cout << "GPU-MatGen: Testing Basic Functionality" << std::endl;
@@ -31,7 +32,7 @@ int main() {
         std::cout << "\nRunning CPU Lanczos reference..." << std::endl;
         auto cpu_start = std::chrono::high_resolution_clock::now();
 
-        CSRMatrix cpu_output = lanczos_cpu_reference(cpu_input, 1.5, 1.5, 1e-6);
+        CSRMatrix cpu_output = lanczos_cpu_reference(cpu_input, 1.5, 1.5, 3, 1e-6);
 
         auto cpu_end = std::chrono::high_resolution_clock::now();
         auto cpu_duration = std::chrono::duration_cast<std::chrono::milliseconds>(cpu_end - cpu_start);
@@ -49,7 +50,7 @@ int main() {
         CSRMatrix gpu_output;
 
         auto gpu_start = std::chrono::high_resolution_clock::now();
-        lanczos_gpu(device_input, gpu_output, 1.5, 1.5, 1e-6);
+        lanczos_gpu(device_input, gpu_output, 1.5, 1.5, 3, 1e-6);
         auto gpu_end = std::chrono::high_resolution_clock::now();
 
         auto gpu_duration = std::chrono::duration_cast<std::chrono::milliseconds>(gpu_end - gpu_start);

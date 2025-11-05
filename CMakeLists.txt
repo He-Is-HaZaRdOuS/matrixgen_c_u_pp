@@ -17,11 +17,10 @@ message(STATUS "Armadillo: ${ARMADILLO_INCLUDE_DIR}")
 set(COMMON_SOURCES
         src/cpu/lanczos.cpp
         src/gpu/lanczos.cu
-        src/gpu/cuda_matrix_utils.cu
 )
 
 # Main application
-add_executable(gpu_matgen src/main.cpp ${COMMON_SOURCES})
+add_executable(gpu_matgen src/main.cu ${COMMON_SOURCES})
 
 # Test application
 add_executable(test_real_matrices

@@ -8,6 +8,7 @@
 #include "formats/cuda_matrix_formats.cuh"
 #include "io/matrix_market.hpp"
 #include "io/matrix_visualizer.hpp"
+#include "utils/cuda_matrix_utils.cuh"
 
 /* Prototype */
 CSRMatrix lanczos_cpu_reference(const CSRMatrix& input, double scale_x, double scale_y, int a, double threshold);
