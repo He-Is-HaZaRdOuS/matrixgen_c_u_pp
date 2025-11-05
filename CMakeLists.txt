@@ -15,9 +15,9 @@ message(STATUS "CUDA compiler: ${CMAKE_CUDA_COMPILER}")
 message(STATUS "Armadillo: ${ARMADILLO_INCLUDE_DIR}")
 
 set(COMMON_SOURCES
-        src/cpu/reference_impl.cpp
+        src/cpu/lanczos.cpp
         src/gpu/lanczos.cu
-        src/gpu/gpu_utils.cu
+        src/gpu/cuda_matrix_utils.cu
 )
 
 # Main application

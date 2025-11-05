@@ -1,8 +1,8 @@
 #include <iostream>
 #include <chrono>
 #include <armadillo>
-#include "../include/formats/matrix_formats.hpp"
-#include "../include/formats/cuda_matrix_formats.cuh"
+#include "formats/matrix_formats.hpp"
+#include "formats/cuda_matrix_formats.cuh"
 
 // Forward declarations
 CSRMatrix lanczos_cpu_reference(const CSRMatrix& input, double scale_x, double scale_y, double threshold);
