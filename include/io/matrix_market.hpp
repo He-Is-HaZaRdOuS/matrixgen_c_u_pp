@@ -1,140 +1,121 @@
 #pragma once
-#include <armadillo>
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <filesystem>
-#include <map>
-#include <utility>
+#include <vector>
+#include <unordered_map>
+#include <tuple>
+#include <algorithm>
 #include "formats/matrix_formats.hpp"
+
+struct CoordHash {
+    std::size_t operator()(const std::pair<int,int> &p) const {
+        return std::hash<int>()(p.first) ^ (std::hash<int>()(p.second)<<1);
+    }
+};
 
 class MatrixMarketReader {
 public:
-    static CSRMatrix load_csr(const std::string& filename) {
-        if (!std::filesystem::exists(filename)) {
+    static CSRMatrix load_csr(const std::string &filename) {
+        if (!std::filesystem::exists(filename))
             throw std::runtime_error("File does not exist: " + filename);
-        }
 
         std::ifstream file(filename);
-        if (!file.is_open()) {
+        if (!file.is_open())
             throw std::runtime_error("Cannot open file: " + filename);
-        }
 
         std::string line;
-        bool is_symmetric = false;
-        bool is_pattern = false;
+        bool symmetric = false, pattern = false;
 
-        /* Parse Matrix Market header */
+        // parse header
         while (std::getline(file, line)) {
-            if (line[0] == '%') {
-                if (line.find("symmetric") != std::string::npos) {
-                    is_symmetric = true;
-                }
-                if (line.find("pattern") != std::string::npos) {
-                    is_pattern = true;
-                }
-                continue;
-            }
-            break;
+            if (line.empty()) continue;
+            if (line[0] != '%') break;
+            if (line.find("symmetric") != std::string::npos) symmetric = true;
+            if (line.find("pattern") != std::string::npos) pattern = true;
         }
 
-        /* Read dimensions */
         int rows, cols, nnz;
-        std::istringstream iss(line);
-        iss >> rows >> cols >> nnz;
-
-        std::cout << "Loading matrix: " << rows << " x " << cols << ", NNZ: " << nnz;
-        if (is_symmetric) std::cout << " (symmetric)";
-        if (is_pattern) std::cout << " (pattern)";
-        std::cout << std::endl;
-
-        /* Use map to automatically deduplicate and accumulate values */
-        std::map<std::pair<int, int>, double> entries_map;
-
-        int entries_read = 0;
-        while (std::getline(file, line) && entries_read < nnz) {
-            if (line.empty() || line[0] == '%') continue;
-
-            std::istringstream data_iss(line);
-            int row, col;
-            double value = 1.0;
-
-            data_iss >> row >> col;
-            if (!is_pattern) {
-                data_iss >> value;
-            }
-
-            /* Convert to 0-based */
-            row--;
-            col--;
-
-            /* Add or accumulate */
-            entries_map[{row, col}] += value;
-
-            /* Add transpose for symmetric matrices */
-            if (is_symmetric && row != col) {
-                entries_map[{col, row}] += value;
-            }
-
-            entries_read++;
+        {
+            std::istringstream iss(line);
+            iss >> rows >> cols >> nnz;
         }
 
+        std::cout << "Loading matrix: " << rows << " x " << cols << ", NNZ: " << nnz
+                  << (symmetric ? " (symmetric)" : "")
+                  << (pattern ? " (pattern)" : "") << std::endl;
+
+        // store in hash map to deduplicate
+        std::unordered_map<std::pair<int,int>, double, CoordHash> entries;
+
+        int read = 0;
+        while (std::getline(file, line) && read < nnz) {
+            if (line.empty() || line[0]=='%') continue;
+
+            std::istringstream iss(line);
+            int r,c; double val=1.0;
+            iss >> r >> c;
+            if (!pattern) iss >> val;
+
+            r--; c--; // 0-based
+
+            if (std::abs(val) > 1e-12) {
+                entries[{r,c}] += val;
+                if (symmetric && r!=c) entries[{c,r}] += val;
+            }
+            read++;
+        }
         file.close();
 
-        std::cout << "Unique entries after deduplication: " << entries_map.size() << std::endl;
+        std::cout << "Unique entries after deduplication: " << entries.size() << std::endl;
 
-        /* Convert map to vectors */
-        std::vector<int> row_indices, col_indices;
-        std::vector<double> values;
+        // convert hash map to CSR
+        CSRMatrix csr;
+        csr.rows = rows;
+        csr.cols = cols;
+        csr.nnz = entries.size();
+        csr.row_ptr.assign(rows+1,0);
+        csr.col_ind.reserve(csr.nnz);
+        csr.values.reserve(csr.nnz);
 
-        row_indices.reserve(entries_map.size());
-        col_indices.reserve(entries_map.size());
-        values.reserve(entries_map.size());
+        // gather entries by row
+        std::vector<std::tuple<int,int,double>> sorted_entries;
+        sorted_entries.reserve(entries.size());
+        for (auto &[coord,val]: entries) sorted_entries.emplace_back(coord.first,coord.second,val);
 
-        for (const auto& [coord, val] : entries_map) {
-            row_indices.push_back(coord.first);
-            col_indices.push_back(coord.second);
-            values.push_back(val);
+        std::sort(sorted_entries.begin(), sorted_entries.end(),
+                  [](const auto &a,const auto &b){return std::get<0>(a)!=std::get<0>(b)? std::get<0>(a)<std::get<0>(b): std::get<1>(a)<std::get<1>(b);});
+
+        for (auto &[r,c,v]: sorted_entries) {
+            csr.col_ind.push_back(c);
+            csr.values.push_back(v);
+            csr.row_ptr[r+1]++;
         }
 
-        /* Build sparse matrix using Armadillo */
-        arma::umat locations(2, row_indices.size());
-        arma::vec vals(values.size());
+        for (int i=0;i<rows;i++) csr.row_ptr[i+1]+=csr.row_ptr[i];
 
-        for (size_t i = 0; i < row_indices.size(); i++) {
-            locations(0, i) = row_indices[i];
-            locations(1, i) = col_indices[i];
-            vals(i) = values[i];
-        }
+        std::cout << "CSR built: " << csr.rows << " x " << csr.cols
+                  << ", NNZ: " << csr.nnz
+                  << " (density: " << (100.0*csr.nnz/(double)(rows*cols)) << "%)" << std::endl;
 
-        arma::sp_mat temp(locations, vals, rows, cols);
-
-        std::cout << "Processed NNZ: " << temp.n_nonzero
-                  << " (density: " << (100.0 * temp.n_nonzero / (static_cast<double>(rows) * cols)) << "%)"
-                  << std::endl;
-
-        return CSRMatrix::from_arma(temp);
+        return csr;
     }
 
-    static void save_csr(const CSRMatrix& matrix, const std::string& filename) {
+    static void save_csr(const CSRMatrix &matrix, const std::string &filename) {
         std::ofstream file(filename);
-        if (!file.is_open()) {
-            throw std::runtime_error("Cannot open file for writing: " + filename);
-        }
+        if (!file.is_open()) throw std::runtime_error("Cannot open file for writing");
 
-        file << "%%MatrixMarket matrix coordinate real general" << std::endl;
-        file << "% Generated by GPU-MatGen" << std::endl;
-        file << matrix.rows << " " << matrix.cols << " " << matrix.nnz << std::endl;
+        file << "%%MatrixMarket matrix coordinate real general\n";
+        file << "% Generated by GPU-MatGen\n";
+        file << matrix.rows << " " << matrix.cols << " " << matrix.nnz << "\n";
 
-        for (int i = 0; i < matrix.rows; i++) {
-            for (int j = matrix.row_ptr[i]; j < matrix.row_ptr[i + 1]; j++) {
-                file << (i + 1) << " " << (matrix.col_ind[j] + 1) << " "
-                     << matrix.values[j] << std::endl;
+        for (int i=0;i<matrix.rows;i++) {
+            for (int j=matrix.row_ptr[i]; j<matrix.row_ptr[i+1]; j++) {
+                file << (i+1) << " " << (matrix.col_ind[j]+1) << " " << matrix.values[j] << "\n";
             }
         }
-
         file.close();
-        std::cout << "Matrix saved to: " << filename << std::endl;
     }
 };
