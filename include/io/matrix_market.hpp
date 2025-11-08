@@ -5,6 +5,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <filesystem>
+#include <map>
+#include <utility>
 #include "formats/matrix_formats.hpp"
 
 class MatrixMarketReader {
@@ -47,13 +49,8 @@ public:
         if (is_pattern) std::cout << " (pattern)";
         std::cout << std::endl;
 
-        /* Read coordinate format data */
-        std::vector<int> row_indices, col_indices;
-        std::vector<double> values;
-
-        row_indices.reserve(is_symmetric ? nnz * 2 : nnz);
-        col_indices.reserve(is_symmetric ? nnz * 2 : nnz);
-        values.reserve(is_symmetric ? nnz * 2 : nnz);
+        /* Use map to automatically deduplicate and accumulate values */
+        std::map<std::pair<int, int>, double> entries_map;
 
         int entries_read = 0;
         while (std::getline(file, line) && entries_read < nnz) {
@@ -72,15 +69,12 @@ public:
             row--;
             col--;
 
-            row_indices.push_back(row);
-            col_indices.push_back(col);
-            values.push_back(value);
+            /* Add or accumulate */
+            entries_map[{row, col}] += value;
 
             /* Add transpose for symmetric matrices */
             if (is_symmetric && row != col) {
-                row_indices.push_back(col);
-                col_indices.push_back(row);
-                values.push_back(value);
+                entries_map[{col, row}] += value;
             }
 
             entries_read++;
@@ -88,7 +82,23 @@ public:
 
         file.close();
 
-        // Build sparse matrix using Armadillo
+        std::cout << "Unique entries after deduplication: " << entries_map.size() << std::endl;
+
+        /* Convert map to vectors */
+        std::vector<int> row_indices, col_indices;
+        std::vector<double> values;
+
+        row_indices.reserve(entries_map.size());
+        col_indices.reserve(entries_map.size());
+        values.reserve(entries_map.size());
+
+        for (const auto& [coord, val] : entries_map) {
+            row_indices.push_back(coord.first);
+            col_indices.push_back(coord.second);
+            values.push_back(val);
+        }
+
+        /* Build sparse matrix using Armadillo */
         arma::umat locations(2, row_indices.size());
         arma::vec vals(values.size());
 
@@ -101,7 +111,7 @@ public:
         arma::sp_mat temp(locations, vals, rows, cols);
 
         std::cout << "Processed NNZ: " << temp.n_nonzero
-                  << " (density: " << (100.0 * temp.n_nonzero / (rows * cols)) << "%)"
+                  << " (density: " << (100.0 * temp.n_nonzero / (static_cast<double>(rows) * cols)) << "%)"
                   << std::endl;
 
         return CSRMatrix::from_arma(temp);

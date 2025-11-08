@@ -16,3 +16,5 @@ struct CSRDeviceMatrix {
 void allocate_device_matrix(const CSRMatrix& cpu_mat, CSRDeviceMatrix& device_mat);
 void free_device_matrix(CSRDeviceMatrix& device_mat);
 void lanczos_gpu(const CSRDeviceMatrix& device_input, CSRMatrix& output, double scale_x, double scale_y, int a, double threshold);
+void lanczos_sparse_gpu(const CSRDeviceMatrix& device_input, CSRMatrix& output, double scale_x, double scale_y, int a, double threshold);
+void lanczos_sparse_gpu_improved(const CSRDeviceMatrix& device_input, CSRMatrix& output, double scale_x, double scale_y, int a, double threshold);

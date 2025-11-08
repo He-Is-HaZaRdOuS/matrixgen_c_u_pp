@@ -17,6 +17,8 @@ message(STATUS "Armadillo: ${ARMADILLO_INCLUDE_DIR}")
 set(COMMON_SOURCES
         src/cpu/lanczos.cpp
         src/gpu/lanczos.cu
+        src/gpu/lanczos_sparse.cu
+        src/gpu/lanczos_sparse2.cu
 )
 
 # Main application
@@ -42,7 +44,7 @@ foreach(target IN ITEMS gpu_matgen test_real_matrices)
     )
 
     target_compile_options(${target} PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:-O3 --use_fast_math>
+            $<$<COMPILE_LANGUAGE:CUDA>:-O3 --use_fast_math --extended-lambda --expt-relaxed-constexpr>
             $<$<COMPILE_LANGUAGE:CXX>:-O3>
     )
 endforeach()
