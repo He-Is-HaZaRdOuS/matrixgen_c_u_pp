@@ -223,7 +223,7 @@ CSRMatrix lanczos_sparse_omp(const CSRMatrix& input,
 
     std::vector<Triplet> global_triplets;
 
-    #pragma omp parallel
+    #pragma omp parallel num_threads(8)
     {
         std::vector<Triplet> local;
         local.reserve(1024);

@@ -27,8 +27,8 @@ void benchmark_matrix(const std::string& filename, double scale, int a, double t
               << " (density: " << (100.0 * input_csr.nnz / (input_csr.rows * input_csr.cols)) << "%)" << std::endl;
 
     // Visualize input
-    // std::filesystem::create_directories(RESOURCES_PATH"plots");
-    // std::string base_name = std::filesystem::path(filename).stem().string();
+    std::filesystem::create_directories(RESOURCES_PATH"plots");
+    std::string base_name = std::filesystem::path(filename).stem().string();
     // MatrixVisualizer::save_spy_plot(input_csr, RESOURCES_PATH"plots/" + base_name + "_input");
     // MatrixVisualizer::save_heatmap(input_csr, RESOURCES_PATH"plots/" + base_name + "_input_heatmap");
 
@@ -48,7 +48,7 @@ void benchmark_matrix(const std::string& filename, double scale, int a, double t
     // MatrixVisualizer::save_spy_plot(cpu_output, RESOURCES_PATH"plots/" + base_name + "_cpu_output");
     // MatrixVisualizer::save_heatmap(cpu_output, RESOURCES_PATH"plots/" + base_name + "_cpu_output_heatmap");
 
-    // CPU sparse test
+    //CPU sparse test
     std::cout << "\n--- CPU Sparse ---" << std::endl;
     auto cpu_sparse_start = std::chrono::high_resolution_clock::now();
     CSRMatrix cpu_sparse_output = lanczos_sparse_omp(input_csr, scale, scale, a, threshold);
@@ -88,14 +88,37 @@ void benchmark_matrix(const std::string& filename, double scale, int a, double t
     // MatrixVisualizer::save_heatmap(gpu_output, RESOURCES_PATH"plots/" + base_name + "_gpu_output_heatmap");
 
     // GPU sparse test
-    std::cout << "\n--- GPU sparse Implementation ---" << std::endl;
+    // std::cout << "\n--- GPU sparse Implementation ---" << std::endl;
+    // CSRDeviceMatrix device_input_sparse;
+    //
+    // auto gpu_sparse_start = std::chrono::high_resolution_clock::now();
+    // allocate_device_matrix(input_csr, device_input_sparse);
+    //
+    // CSRMatrix gpu_sparse_output;
+    // lanczos_sparse_gpu(device_input_sparse, gpu_sparse_output, scale, scale, a, threshold);
+    //
+    // free_device_matrix(device_input_sparse);
+    // auto gpu_sparse_end = std::chrono::high_resolution_clock::now();
+    // auto gpu_sparse_time = std::chrono::duration_cast<std::chrono::milliseconds>(gpu_sparse_end - gpu_sparse_start);
+    //
+    // std::cout << "Time: " << gpu_sparse_time.count() << " ms" << std::endl;
+    // std::cout << "Output: " << gpu_sparse_output.rows << " x " << gpu_sparse_output.cols
+    //           << ", NNZ: " << gpu_sparse_output.nnz
+    //           << " (density: " << (100.0 * gpu_sparse_output.nnz / (gpu_sparse_output.rows * gpu_sparse_output.cols)) << "%)" << std::endl;
+
+    // Visualize GPU output
+    // MatrixVisualizer::save_spy_plot(gpu_sparse_output, RESOURCES_PATH"plots/" + base_name + "_gpu_sparse_output");
+    // MatrixVisualizer::save_heatmap(gpu_sparse_output, RESOURCES_PATH"plots/" + base_name + "_gpu_sparse_output_heatmap");
+
+    // GPU sparse test
+    std::cout << "\n--- GPU sparse !2! Implementation ---" << std::endl;
     CSRDeviceMatrix device_input_sparse;
 
     auto gpu_sparse_start = std::chrono::high_resolution_clock::now();
     allocate_device_matrix(input_csr, device_input_sparse);
 
-    CSRMatrix gpu_sparse_output;
-    lanczos_sparse_gpu(device_input_sparse, gpu_sparse_output, scale, scale, a, threshold);
+    CSRMatrix gpu_sparse_output = CSRMatrix();
+    lanczos_sparse_gpu_improved_chunked(device_input_sparse, gpu_sparse_output, scale, scale, a, threshold);
 
     free_device_matrix(device_input_sparse);
     auto gpu_sparse_end = std::chrono::high_resolution_clock::now();
@@ -106,32 +129,23 @@ void benchmark_matrix(const std::string& filename, double scale, int a, double t
               << ", NNZ: " << gpu_sparse_output.nnz
               << " (density: " << (100.0 * gpu_sparse_output.nnz / (gpu_sparse_output.rows * gpu_sparse_output.cols)) << "%)" << std::endl;
 
-    // Visualize GPU output
-    // MatrixVisualizer::save_spy_plot(gpu_sparse_output, RESOURCES_PATH"plots/" + base_name + "_gpu_sparse_output");
-    // MatrixVisualizer::save_heatmap(gpu_sparse_output, RESOURCES_PATH"plots/" + base_name + "_gpu_sparse_output_heatmap");
+    // Save GPU sparse output to disk
+    // std::string out_dir = "results";
+    // std::filesystem::create_directories(out_dir);
+    //
+    // std::string out_name = base_name
+    //                      + "_scale" + std::to_string(scale)
+    //                      + "_a" + std::to_string(a)
+    //                      + "_gpu_sparse2.mtx";
+    //
+    // std::string out_path = out_dir + "/" + out_name;
+    // MatrixMarketReader::save_csr(gpu_sparse_output, out_path);
+    // std::cout << "Saved GPU sparse output to: " << out_path << std::endl;
 
-    // GPU sparse test
-    std::cout << "\n--- GPU sparse !2! Implementation ---" << std::endl;
-    // CSRDeviceMatrix device_input_sparse;
-
-    gpu_sparse_start = std::chrono::high_resolution_clock::now();
-    allocate_device_matrix(input_csr, device_input_sparse);
-
-    gpu_sparse_output = CSRMatrix();
-    lanczos_sparse_gpu_improved(device_input_sparse, gpu_sparse_output, scale, scale, a, threshold);
-
-    free_device_matrix(device_input_sparse);
-    gpu_sparse_end = std::chrono::high_resolution_clock::now();
-    gpu_sparse_time = std::chrono::duration_cast<std::chrono::milliseconds>(gpu_sparse_end - gpu_sparse_start);
-
-    std::cout << "Time: " << gpu_sparse_time.count() << " ms" << std::endl;
-    std::cout << "Output: " << gpu_sparse_output.rows << " x " << gpu_sparse_output.cols
-              << ", NNZ: " << gpu_sparse_output.nnz
-              << " (density: " << (100.0 * gpu_sparse_output.nnz / (gpu_sparse_output.rows * gpu_sparse_output.cols)) << "%)" << std::endl;
 
     // Visualize GPU output
-    // MatrixVisualizer::save_spy_plot(gpu_sparse_output, RESOURCES_PATH"plots/" + base_name + "_gpu_sparse_output");
-    // MatrixVisualizer::save_heatmap(gpu_sparse_output, RESOURCES_PATH"plots/" + base_name + "_gpu_sparse_output_heatmap");
+    // MatrixVisualizer::save_spy_plot(gpu_sparse_output, RESOURCES_PATH"plots/" + base_name + "_gpu_sparse2_output");
+    // MatrixVisualizer::save_heatmap(gpu_sparse_output, RESOURCES_PATH"plots/" + base_name + "_gpu_sparse2_output_heatmap");
 
     // // Results
     // std::cout << "\n--- Results Summary ---" << std::endl;
@@ -153,23 +167,23 @@ void benchmark_matrix(const std::string& filename, double scale, int a, double t
     // }
 
     // Results
-    std::cout << "\n--- Results Summary ---" << std::endl;
-    bool dimensions_match = (cpu_sparse_output.rows == gpu_sparse_output.rows && cpu_sparse_output.cols == gpu_sparse_output.cols);
-    bool nnz_similar = (std::abs(cpu_sparse_output.nnz - gpu_sparse_output.nnz) < std::max(cpu_sparse_output.nnz, gpu_sparse_output.nnz) * 0.1);
-
-    std::cout << "Dimensions match: " << (dimensions_match ? "Yes" : "No") << std::endl;
-    std::cout << "NNZ similar: " << (nnz_similar ? "Yes" : "No") << std::endl;
-
-    if (dimensions_match && gpu_sparse_time.count() > 0 && cpu_sparse_time.count() > 0) {
-        double speedup = static_cast<double>(cpu_sparse_time.count()) / gpu_sparse_time.count();
-        std::cout << "Speedup: " << speedup << "x" << std::endl;
-
-        if (speedup > 1.0) {
-            std::cout << "GPU is " << speedup << "x faster than CPU!" << std::endl;
-        } else {
-            std::cout << "CPU is " << (1.0/speedup) << "x faster than GPU" << std::endl;
-        }
-    }
+    // std::cout << "\n--- Results Summary ---" << std::endl;
+    // bool dimensions_match = (cpu_sparse_output.rows == gpu_sparse_output.rows && cpu_sparse_output.cols == gpu_sparse_output.cols);
+    // bool nnz_similar = (std::abs(cpu_sparse_output.nnz - gpu_sparse_output.nnz) < std::max(cpu_sparse_output.nnz, gpu_sparse_output.nnz) * 0.1);
+    //
+    // std::cout << "Dimensions match: " << (dimensions_match ? "Yes" : "No") << std::endl;
+    // std::cout << "NNZ similar: " << (nnz_similar ? "Yes" : "No") << std::endl;
+    //
+    // if (dimensions_match && gpu_sparse_time.count() > 0 && cpu_sparse_time.count() > 0) {
+    //     double speedup = static_cast<double>(cpu_sparse_time.count()) / gpu_sparse_time.count();
+    //     std::cout << "Speedup: " << speedup << "x" << std::endl;
+    //
+    //     if (speedup > 1.0) {
+    //         std::cout << "GPU is " << speedup << "x faster than CPU!" << std::endl;
+    //     } else {
+    //         std::cout << "CPU is " << (1.0/speedup) << "x faster than GPU" << std::endl;
+    //     }
+    // }
 }
 
 int main() {
@@ -180,24 +194,26 @@ int main() {
     std::filesystem::create_directories("results");
 
     /* Test parameters */
-    double scale = 2;
+    std::vector<double> scales = {0.5, 2, 4};
     int a = 2;
     double threshold = 1e-6;
 
     /* real matrix files on disk */
     std::vector<std::string> test_matrices = {
-        RESOURCES_PATH"1138_bus.mtx",
-        RESOURCES_PATH"bcspwr01.mtx",
-        RESOURCES_PATH"bayer02.mtx",
-        RESOURCES_PATH"FEM_3D_thermal1.mtx",
-        RESOURCES_PATH"lpl3.mtx",
-        RESOURCES_PATH"poli2.mtx"
+        // RESOURCES_PATH"1138_bus.mtx",
+        // RESOURCES_PATH"bayer02.mtx",
+        // RESOURCES_PATH"FEM_3D_thermal1.mtx",
+        // RESOURCES_PATH"lpl3.mtx",
+        // RESOURCES_PATH"poli3.mtx",
+        // RESOURCES_PATH"LFAT5.mtx",
+        // RESOURCES_PATH"para-7.mtx",
+        RESOURCES_PATH"bcsstk30.mtx",
     };
 
-    for (int i = 0; i < 3; ++i) {
+    for (const auto &s: scales) {
         for (const auto& matrix_file : test_matrices) {
             if (std::filesystem::exists(matrix_file)) {
-                benchmark_matrix(matrix_file, scale, a, threshold);
+                benchmark_matrix(matrix_file, s, a, threshold);
             }
         }
     }

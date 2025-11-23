@@ -19,6 +19,7 @@ set(COMMON_SOURCES
         src/gpu/lanczos.cu
         src/gpu/lanczos_sparse.cu
         src/gpu/lanczos_sparse2.cu
+        src/gpu/lanczos_sparse3.cu
 )
 
 # Main application
