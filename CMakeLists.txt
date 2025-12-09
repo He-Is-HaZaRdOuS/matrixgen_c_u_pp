@@ -22,9 +22,6 @@ set(COMMON_SOURCES
         src/gpu/lanczos_sparse3.cu
 )
 
-# Main application
-add_executable(gpu_matgen src/main.cu ${COMMON_SOURCES})
-
 # Test application
 add_executable(test_real_matrices
         src/test_real_matrices.cu
