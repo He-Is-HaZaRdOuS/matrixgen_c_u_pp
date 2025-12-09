@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "kernels/lanczos.hpp"
 #include "utils/cuda_utils.cuh"
 #include <cuda.h>
@@ -7,7 +9,6 @@
 #include <thrust/scan.h>
 #include <vector>
 #include <iostream>
-#include <crt/host_defines.h>
 
 #include "formats/cuda_matrix_formats.cuh"
 
@@ -364,7 +365,6 @@ void lanczos_sparse_gpu(
         return;
     }
 
-    // Convert to CSR manually (safer than Armadillo for debugging)
     output.rows = new_rows;
     output.cols = new_cols;
     output.nnz = out_vals.size();

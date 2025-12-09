@@ -2,6 +2,7 @@
 #include <cuda.h>
 #include <iostream>
 #include <stdexcept>
+#include <sstream>
 
 #define CUDA_CHECK(call) \
 do { \

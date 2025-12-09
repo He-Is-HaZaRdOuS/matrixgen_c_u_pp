@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <tuple>
 #include <omp.h>
+#include <unordered_map>
 
 struct Contribution {
     double value;

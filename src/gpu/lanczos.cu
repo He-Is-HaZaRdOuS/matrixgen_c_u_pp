@@ -5,6 +5,9 @@
 #include "utils/cuda_utils.cuh"
 #include "kernels/lanczos.hpp"
 
+#include <sstream>
+#include <cuda/std/detail/libcxx/include/chrono>
+
 __global__ void lanczos_kernel_2d(
     const int* __restrict__ row_ptr,
     const int* __restrict__ col_ind,

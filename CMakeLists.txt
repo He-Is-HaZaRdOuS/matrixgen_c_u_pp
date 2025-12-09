@@ -9,10 +9,8 @@ set(CMAKE_CUDA_STANDARD 17)
 # Find dependencies
 find_package(CUDAToolkit REQUIRED)
 find_package(OpenMP REQUIRED)
-find_package(Armadillo REQUIRED)
 
 message(STATUS "CUDA compiler: ${CMAKE_CUDA_COMPILER}")
-message(STATUS "Armadillo: ${ARMADILLO_INCLUDE_DIR}")
 
 set(COMMON_SOURCES
         src/cpu/lanczos.cpp
@@ -35,13 +33,11 @@ add_executable(test_real_matrices
 foreach(target IN ITEMS gpu_matgen test_real_matrices)
     target_link_libraries(${target}
             OpenMP::OpenMP_CXX
-            ${ARMADILLO_LIBRARIES}
             CUDA::cudart
     )
 
     target_include_directories(${target} PRIVATE
             include
-            ${ARMADILLO_INCLUDE_DIR}
     )
 
     target_compile_options(${target} PRIVATE

@@ -2,8 +2,6 @@
 #include <chrono>
 #include <vector>
 #include <filesystem>
-#define ARMA_ALLOW_FAKE_GCC
-#include <armadillo>
 #include "formats/matrix_formats.hpp"
 #include "formats/cuda_matrix_formats.cuh"
 #include "io/matrix_market.hpp"
