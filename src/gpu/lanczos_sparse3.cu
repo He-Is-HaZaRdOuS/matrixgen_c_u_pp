@@ -1,21 +1,19 @@
+/*
+ * This is a good balance between speed and efficiency, uses chunking strategy to not overflow vram during densification
+*/
 #include <algorithm>
 #include <sstream>
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
-#include <thrust/unique.h>
 #include <thrust/scan.h>
-#include <thrust/copy.h>
 #include <thrust/reduce.h>
 #include <thrust/sequence.h>
 #include <thrust/iterator/zip_iterator.h>
-#include <thrust/tuple.h>
 #include <thrust/execution_policy.h>
 
 #include "formats/cuda_matrix_formats.cuh"
 #include "kernels/lanczos.hpp"
 #include "utils/cuda_utils.cuh"
-
-// ---------- row_of_nnz: same as before ----------
 
 __global__ void build_row_of_nnz_kernel_c(const int* __restrict__ row_ptr,
                                         int rows, int nnz,
@@ -30,17 +28,15 @@ __global__ void build_row_of_nnz_kernel_c(const int* __restrict__ row_ptr,
     }
 }
 
-// ---------- per-nnz window size (counts) ----------
-
 __global__ void compute_influence_counts_kernel(
     const int* __restrict__ col_ind,
     const int* __restrict__ row_of_nnz,
     int input_rows, int input_cols,
-    int nnz_start, int nnz_count,   // process nnz in [nnz_start, nnz_start+nnz_count)
+    int nnz_start, int nnz_count,
     double scale_x, double scale_y,
     int kernel_size,
     int output_rows, int output_cols,
-    int* __restrict__ counts_out)   // length = nnz_count
+    int* __restrict__ counts_out)
 {
     int local_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (local_idx >= nnz_count) return;
@@ -68,11 +64,6 @@ __global__ void compute_influence_counts_kernel(
     counts_out[local_idx] = window_rows * window_cols;
 }
 
-// ---------- write contributions (key, num, den) per influence ----------
-
-// key = (uint64_t(out_i) << 32) | uint32_t(out_j)
-// num = val * weight, den = weight
-
 __global__ void write_contribs_kernel(
     const int* __restrict__ col_ind,
     const int* __restrict__ row_of_nnz,
@@ -82,10 +73,10 @@ __global__ void write_contribs_kernel(
     double scale_x, double scale_y,
     int kernel_size,
     int output_rows, int output_cols,
-    const int* __restrict__ offsets,   // exclusive scan of counts, length = nnz_count+1
-    uint64_t* __restrict__ keys_out,   // length = total_influenced_chunk
-    double* __restrict__ num_out,      // length = total_influenced_chunk
-    double* __restrict__ den_out)      // length = total_influenced_chunk
+    const int* __restrict__ offsets,
+    uint64_t* __restrict__ keys_out,
+    double* __restrict__ num_out,
+    double* __restrict__ den_out)
 {
     int local_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (local_idx >= nnz_count) return;
@@ -111,12 +102,10 @@ __global__ void write_contribs_kernel(
     int pos = 0;
 
     for (int out_i = out_i_start; out_i <= out_i_end; ++out_i) {
-        // original coordinate in source space
         double orig_i = out_i / scale_y;
         double dist_i = orig_i - ii;
         double w_i = lanczos_kernel(dist_i, kernel_size);
         if (fabs(w_i) < 1e-12) {
-            // still need to advance pos for all cols in this row
             pos += (out_j_end - out_j_start + 1);
             continue;
         }
@@ -170,7 +159,6 @@ void lanczos_sparse_gpu_improved_chunked(
         return;
     }
 
-    // 1) row_of_nnz (once)
     thrust::device_vector<int> d_row_of_nnz(nnz);
     {
         int block = 256;
@@ -184,21 +172,17 @@ void lanczos_sparse_gpu_improved_chunked(
 
 
 
-    // Global accumulators on device: keys, num, den
     thrust::device_vector<uint64_t> d_global_keys;
     thrust::device_vector<double>   d_global_num;
     thrust::device_vector<double>   d_global_den;
 
-    // temp vectors reused for counts and offsets within each chunk
     thrust::device_vector<int> d_counts;
     thrust::device_vector<int> d_offsets;
 
-    // --- BEFORE chunk loop: compute counts for ALL NNZ once (d_counts_all) ---
     thrust::device_vector<int> d_counts_all(nnz);
     {
         int block = 256;
         int grid = (nnz + block - 1) / block;
-        // reuse your compute_influence_counts_kernel but pass nnz_start=0 and nnz_count=nnz
         compute_influence_counts_kernel<<<grid, block>>>(
             device_input.col_ind,
             thrust::raw_pointer_cast(d_row_of_nnz.data()),
@@ -212,7 +196,6 @@ void lanczos_sparse_gpu_improved_chunked(
         CUDA_CHECK(cudaDeviceSynchronize());
     }
 
-    // total influenced across whole matrix
     thrust::device_vector<long long> d_scan(nnz + 1);
     d_scan[0] = 0;
     thrust::exclusive_scan(thrust::device, d_counts_all.begin(), d_counts_all.end(), d_scan.begin() + 1);
@@ -225,19 +208,19 @@ void lanczos_sparse_gpu_improved_chunked(
 
     if (total_influenced_all == 0) { /* empty result early return as before */ }
 
-    // memory budget heuristic (tuneable)
+    /* vram budget heuristic */
     size_t free_mem = 0, total_mem = 0;
     cudaMemGetInfo(&free_mem, &total_mem);
-    size_t budget = static_cast<size_t>(free_mem * 0.90); // stay under 45% of free mem
-    const size_t bytes_per_influence = 24; // key(8)+num(8)+den(8)
+    size_t budget = static_cast<size_t>(free_mem * 0.45);
+    const size_t bytes_per_influence = 24;
     size_t max_influences_allowed = budget / bytes_per_influence;
     if (max_influences_allowed < 8192) max_influences_allowed = 8192;
 
     double avg_infl_per_nnz = (double)total_influenced_all / (double)nnz;
     size_t nnz_per_chunk_guess = (size_t)std::max( (double)1.0, (double)max_influences_allowed / std::max(1.0, avg_infl_per_nnz) );
 
-    // Hard caps to avoid pathological chunk sizes
-    const size_t HARD_CAP_NNZ_PER_CHUNK = 200000; // tune: 200k nnz per chunk max
+    /* Hard upper limit */
+    const size_t HARD_CAP_NNZ_PER_CHUNK = 200000; /* 200k nnz per chunk max */
     const size_t MIN_NNZ_PER_CHUNK = 256;
 
     size_t nnz_per_chunk = std::min( HARD_CAP_NNZ_PER_CHUNK, std::max(MIN_NNZ_PER_CHUNK, nnz_per_chunk_guess) );
@@ -248,20 +231,17 @@ void lanczos_sparse_gpu_improved_chunked(
               << "avg_infl/nz: " << avg_infl_per_nnz << ", "
               << "nnz_per_chunk initial: " << nnz_per_chunk << std::endl;
 
-    // --- chunk loop: reuse d_counts_all and d_scan for per-chunk offsets ---
     int processed_nnz = 0;
     while (processed_nnz < nnz) {
         int chunk_start = processed_nnz;
         int remaining   = nnz - processed_nnz;
         int chunk_n     = (int)std::min((size_t)remaining, nnz_per_chunk);
 
-        // compute per-chunk total influenced from d_scan: total = scan[chunk_start + chunk_n] - scan[chunk_start]
         int scan_before = 0, scan_after = 0;
         CUDA_CHECK(cudaMemcpy(&scan_before, thrust::raw_pointer_cast(d_scan.data()) + chunk_start, sizeof(int), cudaMemcpyDeviceToHost));
         CUDA_CHECK(cudaMemcpy(&scan_after,  thrust::raw_pointer_cast(d_scan.data()) + (chunk_start + chunk_n), sizeof(int), cudaMemcpyDeviceToHost));
         int total_influenced_chunk = scan_after - scan_before;
 
-        // defensive adjustment: if chunk will produce too many influences, halve chunk_n until fits
         while ((size_t)total_influenced_chunk > max_influences_allowed && chunk_n > (int)MIN_NNZ_PER_CHUNK) {
             chunk_n = std::max((int)MIN_NNZ_PER_CHUNK, chunk_n / 2);
             CUDA_CHECK(cudaMemcpy(&scan_after, thrust::raw_pointer_cast(d_scan.data()) + (chunk_start + chunk_n), sizeof(int), cudaMemcpyDeviceToHost));
@@ -274,21 +254,19 @@ void lanczos_sparse_gpu_improved_chunked(
 
         std::cout << "Processing NNZ chunk: [" << chunk_start << "," << (chunk_start + chunk_n) << "), influences: " << total_influenced_chunk << std::endl;
 
-        // build device-side offsets array for this chunk by copying d_scan[chunk_start..chunk_start+chunk_n-1] -> chunk_offsets (exclusive)
         thrust::device_vector<int> d_counts_chunk(chunk_n);
         thrust::device_vector<int> d_offsets_chunk(chunk_n + 1);
-        // copy counts slice
+
         CUDA_CHECK(cudaMemcpy(thrust::raw_pointer_cast(d_counts_chunk.data()),
                               thrust::raw_pointer_cast(d_counts_all.data()) + chunk_start,
                               chunk_n * sizeof(int), cudaMemcpyDeviceToDevice));
-        // exclusive scan to offsets
+
         d_offsets_chunk[0] = 0;
         thrust::exclusive_scan(thrust::device, d_counts_chunk.begin(), d_counts_chunk.end(), d_offsets_chunk.begin() + 1);
         int total_influenced_chunk_check = 0;
         CUDA_CHECK(cudaMemcpy(&total_influenced_chunk_check, thrust::raw_pointer_cast(d_offsets_chunk.data()) + chunk_n, sizeof(int), cudaMemcpyDeviceToHost));
-        // sanity: should equal total_influenced_chunk
+        /* Sanity check */
         if (total_influenced_chunk_check != total_influenced_chunk) {
-            // fallback: recompute counts for this chunk (rare)
             int block = 256;
             int grid  = (chunk_n + block - 1) / block;
             compute_influence_counts_kernel<<<grid, block>>>(
@@ -308,12 +286,10 @@ void lanczos_sparse_gpu_improved_chunked(
             total_influenced_chunk = total_influenced_chunk_check;
         }
 
-        // allocate per-chunk buffers sized from offsets
         thrust::device_vector<uint64_t> d_keys_chunk(total_influenced_chunk);
         thrust::device_vector<double>   d_num_chunk(total_influenced_chunk);
         thrust::device_vector<double>   d_den_chunk(total_influenced_chunk);
 
-        // write_contribs_kernel uses offsets relative to chunk (d_offsets_chunk)
         {
             int block = 256;
             int grid  = (chunk_n + block - 1) / block;
@@ -334,11 +310,6 @@ void lanczos_sparse_gpu_improved_chunked(
             CUDA_CHECK(cudaDeviceSynchronize());
         }
 
-        // reduce chunk, append to global lists as before...
-        // (same as your existing chunk reduce/append code)
-
-// 3.5 sort-by-key and reduce_by_key (accumulate num, den per pixel)
-        // zip num+den so they stay aligned during sort and reduce
         auto zip_in_begin = thrust::make_zip_iterator(
             thrust::make_tuple(d_num_chunk.begin(), d_den_chunk.begin()));
         auto zip_in_end   = thrust::make_zip_iterator(
@@ -346,7 +317,6 @@ void lanczos_sparse_gpu_improved_chunked(
 
         thrust::sort_by_key(d_keys_chunk.begin(), d_keys_chunk.end(), zip_in_begin);
 
-        // allocate per-chunk reduced arrays (size <= total_influenced_chunk)
         thrust::device_vector<uint64_t> d_keys_chunk_red(total_influenced_chunk);
         thrust::device_vector<double>   d_num_chunk_red(total_influenced_chunk);
         thrust::device_vector<double>   d_den_chunk_red(total_influenced_chunk);
@@ -379,7 +349,6 @@ void lanczos_sparse_gpu_improved_chunked(
             continue;
         }
 
-        // 3.6 append chunk-reduced data to global device vectors
         size_t old_size = d_global_keys.size();
         d_global_keys.resize(old_size + chunk_unique);
         d_global_num.resize(old_size + chunk_unique);
@@ -417,7 +386,6 @@ void lanczos_sparse_gpu_improved_chunked(
         return;
     }
 
-    // 4) final global merge: sort + reduce_by_key
     {
         auto zip_in_begin = thrust::make_zip_iterator(
             thrust::make_tuple(d_global_num.begin(), d_global_den.begin()));
@@ -465,7 +433,6 @@ void lanczos_sparse_gpu_improved_chunked(
             return;
         }
 
-        // 5) compute final values (num/den + threshold) and unpack keys to rows/cols on host
 
         std::vector<uint64_t> h_keys(num_final);
         std::vector<double>   h_num(num_final);
@@ -478,7 +445,6 @@ void lanczos_sparse_gpu_improved_chunked(
         CUDA_CHECK(cudaMemcpy(h_den.data(),  thrust::raw_pointer_cast(d_final_den.data()),
                               num_final * sizeof(double),   cudaMemcpyDeviceToHost));
 
-        // apply threshold & build COO on host
         std::vector<int>    h_rows;
         std::vector<int>    h_cols;
         std::vector<double> h_vals;
@@ -506,7 +472,7 @@ void lanczos_sparse_gpu_improved_chunked(
         int final_nnz = (int)h_rows.size();
         std::cout << "Final nonzeros after threshold: " << final_nnz << std::endl;
 
-        // 6) build CSR on host from COO (rows, cols, vals)
+        /* Build CSR on host from COO */
         output.rows = out_rows;
         output.cols = out_cols;
         output.nnz  = final_nnz;
@@ -514,19 +480,16 @@ void lanczos_sparse_gpu_improved_chunked(
         output.col_ind = h_cols;
         output.row_ptr.assign(out_rows + 1, 0);
 
-        // count nnz per row
         for (int i = 0; i < final_nnz; ++i) {
             int r = h_rows[i];
             if (r >= 0 && r < out_rows)
                 output.row_ptr[r + 1]++;
         }
-        // prefix sum
         for (int r = 0; r < out_rows; ++r) {
             output.row_ptr[r + 1] += output.row_ptr[r];
         }
 
-        // if rows are not sorted, we should reorder by row+col
-        if ((int)output.row_ptr[out_rows] != final_nnz) {
+        if (output.row_ptr[out_rows] != final_nnz) {
             struct Trip { int r, c; double v; };
             std::vector<Trip> trip(final_nnz);
             for (int i = 0; i < final_nnz; ++i)

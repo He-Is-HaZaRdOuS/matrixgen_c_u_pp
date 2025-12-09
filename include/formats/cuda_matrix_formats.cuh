@@ -1,6 +1,5 @@
 #pragma once
 #include "matrix_formats.hpp"
-#include <cuda.h>
 
 /* GPU CSR format */
 struct CSRDeviceMatrix {

@@ -4,13 +4,13 @@
 #include <filesystem>
 #include "formats/matrix_formats.hpp"
 #include "formats/cuda_matrix_formats.cuh"
+#include "utils/cuda_matrix_utils.cuh"
 #include "io/matrix_market.hpp"
 #include "io/matrix_visualizer.hpp"
-#include "utils/cuda_matrix_utils.cuh"
 
 /* Prototypes */
 CSRMatrix lanczos_cpu_reference(const CSRMatrix& input, double scale_x, double scale_y, int a, double threshold);
-CSRMatrix lanczos_sparse_deterministic(const CSRMatrix& input, double scale_x, double scale_y, int a, double threshold);
+CSRMatrix lanczos_sparse(const CSRMatrix& input, double scale_x, double scale_y, int a, double threshold);
 CSRMatrix lanczos_sparse_omp(const CSRMatrix& input, double scale_x, double scale_y, int a, double threshold);
 
 void benchmark_matrix(const std::string& filename, double scale, int a, double threshold) {

@@ -113,8 +113,8 @@ CSRMatrix lanczos_cpu_reference(const CSRMatrix& input, double scale_x, double s
     return output;
 }
 
-/* Deterministic sparse Lanczos */
-CSRMatrix lanczos_sparse_deterministic(
+/* Sparse Lanczos */
+CSRMatrix lanczos_sparse(
     const CSRMatrix& input,
     double scale_x, double scale_y,
     int kernel_size, double threshold) {
@@ -122,35 +122,26 @@ CSRMatrix lanczos_sparse_deterministic(
     int new_rows = std::round(input.rows * scale_y);
     int new_cols = std::round(input.cols * scale_x);
 
-    // For each input nonzero, calculate which output pixels it affects
     std::unordered_map<std::pair<int,int>, std::vector<Contribution>, CoordHash> output_accumulator;
 
-    // Forward pass: distribute input nonzeros to output
     for (int ii = 0; ii < input.rows; ii++) {
         for (int idx = input.row_ptr[ii]; idx < input.row_ptr[ii + 1]; idx++) {
             int jj = input.col_ind[idx];
             double input_val = input.values[idx];
 
-            // This input pixel at (ii, jj) affects output pixels in a window
-            // Calculate output window this input affects
             double out_i_center = ii * scale_y;
             double out_j_center = jj * scale_x;
 
-            // Lanczos kernel has support of 'a' in INPUT space
-            // In OUTPUT space, the support is 'a * scale'
             int out_i_start = std::max(0, (int)std::floor(out_i_center - kernel_size * scale_y));
             int out_i_end = std::min(new_rows - 1, (int)std::ceil(out_i_center + kernel_size * scale_y));
             int out_j_start = std::max(0, (int)std::floor(out_j_center - kernel_size * scale_x));
             int out_j_end = std::min(new_cols - 1, (int)std::ceil(out_j_center + kernel_size * scale_x));
 
-            // Distribute this input pixel's contribution to all affected output pixels
             for (int out_i = out_i_start; out_i <= out_i_end; out_i++) {
                 for (int out_j = out_j_start; out_j <= out_j_end; out_j++) {
-                    // Map output position back to input space
                     double orig_i = out_i / scale_y;
                     double orig_j = out_j / scale_x;
 
-                    // Calculate Lanczos weight
                     double dist_i = orig_i - ii;
                     double dist_j = orig_j - jj;
 
@@ -167,7 +158,6 @@ CSRMatrix lanczos_sparse_deterministic(
         }
     }
 
-    // Normalize accumulated contributions
     std::vector<int> out_rows, out_cols;
     std::vector<double> out_vals;
 
@@ -317,7 +307,6 @@ CSRMatrix lanczos_sparse_omp(const CSRMatrix& input,
         }
     }
 
-    // Last group
     double result = (std::abs(acc_weight) > 1e-9) ? acc_val / acc_weight : 0.0;
     if (std::abs(result) > threshold) {
         out_rows.push_back(current_row);

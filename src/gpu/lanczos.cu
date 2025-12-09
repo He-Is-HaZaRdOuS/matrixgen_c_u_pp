@@ -1,3 +1,7 @@
+/*
+ * Dense Lanczos, bad because duh
+ */
+
 #include <cuda.h>
 #include <vector>
 #include <iostream>
@@ -45,10 +49,8 @@ __global__ void lanczos_kernel_2d(
                 double dist_i = orig_i - ii;
                 double dist_j = orig_j - jj;
 
-                // Compute weight directly - let compiler optimize
                 double weight = lanczos_kernel(dist_i, a) * lanczos_kernel(dist_j, a);
 
-                // Single branch - less divergence
                 if (fabs(weight) > 1e-9) {
                     sum += val * weight;
                     weight_sum += weight;
@@ -70,14 +72,12 @@ void lanczos_gpu_launcher(
     double* temp_dense, int output_rows, int output_cols,
     double scale_x, double scale_y, int a) {
 
-    // Configure kernel launch
     dim3 block_size(16, 16);
     dim3 grid_size(
         (output_cols + block_size.x - 1) / block_size.x,
         (output_rows + block_size.y - 1) / block_size.y
     );
 
-    // Launch kernel
     lanczos_kernel_2d<<<grid_size, block_size>>>(
         row_ptr, col_ind, values,
         input_rows, input_cols,
@@ -88,6 +88,7 @@ void lanczos_gpu_launcher(
     cudaDeviceSynchronize();
 }
 
+/* Host wrapper */
 void lanczos_gpu(const CSRDeviceMatrix& device_input,
                 CSRMatrix& output,
                 double scale_x, double scale_y, int a, double threshold) {
@@ -95,7 +96,6 @@ void lanczos_gpu(const CSRDeviceMatrix& device_input,
     int output_rows = round(device_input.rows * scale_y);
     int output_cols = round(device_input.cols * scale_x);
 
-    // Allocation
     auto alloc_start = std::chrono::high_resolution_clock::now();
     double* d_temp_dense;
     size_t dense_size = output_rows * output_cols * sizeof(double);
@@ -109,7 +109,6 @@ void lanczos_gpu(const CSRDeviceMatrix& device_input,
         (output_rows + block_size.y - 1) / block_size.y
     );
 
-    // Kernel execution
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -130,7 +129,6 @@ void lanczos_gpu(const CSRDeviceMatrix& device_input,
     cudaEventElapsedTime(&kernel_ms, start, stop);
     std::cout << "  Kernel time: " << kernel_ms << " ms" << std::endl;
 
-    // Memory copy
     auto copy_start = std::chrono::high_resolution_clock::now();
     std::vector<double> temp_host(output_rows * output_cols);
     CUDA_CHECK(cudaMemcpy(temp_host.data(), d_temp_dense, dense_size,
@@ -138,7 +136,6 @@ void lanczos_gpu(const CSRDeviceMatrix& device_input,
     CUDA_CHECK(cudaFree(d_temp_dense));
     auto copy_end = std::chrono::high_resolution_clock::now();
 
-    // Compaction
     auto compact_start = std::chrono::high_resolution_clock::now();
     std::vector<int> rows, cols;
     std::vector<double> vals;
@@ -163,7 +160,7 @@ void lanczos_gpu(const CSRDeviceMatrix& device_input,
     std::cout << "  Copy time: " << copy_time.count() << " ms" << std::endl;
     std::cout << "  Compaction time: " << compact_time.count() << " ms" << std::endl;
 
-    // Build output CSR...
+    /* Build output CSR */
     output.rows = output_rows;
     output.cols = output_cols;
     output.nnz = vals.size();
