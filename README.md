@@ -33,10 +33,11 @@ Open a terminal window and execute the following commands line by line </br>
 ```
 
 ## Installing OpenMP
-A recent version of gcc/g++ from your distribution's package manager should suffice
+A recent version of gcc/g++ from your distribution's package manager should suffice although g++11 is recommended.
 
 ## Installing CUDA
-https://docs.nvidia.com/cuda/cuda-installation-guide-linux/
+https://docs.nvidia.com/cuda/cuda-installation-guide-linux/ <br>
+Install at least CUDA Toolkit 12.1 from the NVIDIA website or your distribution's package manager.
 
 ## Compilation
 open a terminal window and cd into the project folder </br>
@@ -58,7 +59,7 @@ open a terminal window and cd into the project folder </br>
 ```
 
 the executable will be generated inside the respective build-X folder. </br>
-Release preset uses -O2 flag whereas the Debug preset uses the default optimization flag and enables debug symbols. </br>
+Both presets currently use -O3 flag for host and device code and fast math for device code, debugging is enabled via a macro definition. </br>
 
 ## Running
 To run the test executable, open a terminal window and type </br>
