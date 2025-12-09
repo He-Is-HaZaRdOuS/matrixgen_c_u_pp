@@ -29,7 +29,7 @@ add_executable(test_real_matrices
 )
 
 # Link libraries
-foreach(target IN ITEMS gpu_matgen test_real_matrices)
+foreach(target IN ITEMS test_real_matrices)
     target_link_libraries(${target}
             OpenMP::OpenMP_CXX
             CUDA::cudart
