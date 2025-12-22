@@ -86,9 +86,8 @@ void run_backend(const std::string& backend,
 
     const std::string tag =
         make_tagged_name(base, backend, scale, a);
-
-    std::filesystem::create_directories(RESOURCES_PATH "plots");
-    std::filesystem::create_directories("results");
+    
+    std::filesystem::create_directories(RESOURCES_PATH "results");
 
     /* Input visualization */
     MatrixVisualizer::save_spy_plot(
@@ -142,7 +141,7 @@ void run_backend(const std::string& backend,
 
     /* Save matrix */
     const std::string out_path =
-        "results/" + tag + ".mtx";
+        RESOURCES_PATH "results/" + tag + ".mtx";
 
     MatrixMarketReader::save_csr(output, out_path);
 
