@@ -28,8 +28,11 @@ add_executable(test_real_matrices
         ${COMMON_SOURCES}
 )
 
+# Main
+add_executable(matgen src/main.cu ${COMMON_SOURCES})
+
 # Link libraries
-foreach(target IN ITEMS test_real_matrices)
+foreach(target IN ITEMS test_real_matrices matgen)
     target_link_libraries(${target}
             OpenMP::OpenMP_CXX
             CUDA::cudart
@@ -43,11 +46,11 @@ foreach(target IN ITEMS test_real_matrices)
             $<$<COMPILE_LANGUAGE:CUDA>:-O3 --use_fast_math --extended-lambda --expt-relaxed-constexpr>
             $<$<COMPILE_LANGUAGE:CXX>:-O3>
     )
+
+    target_compile_definitions(${target} PRIVATE
+            RESOURCES_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/"
+    )
 endforeach()
 
-# Resource path for tests
-target_compile_definitions(test_real_matrices PRIVATE
-        RESOURCES_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/"
-)
 
 message(STATUS "Build configured successfully!")

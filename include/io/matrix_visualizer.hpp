@@ -23,7 +23,7 @@ public:
         double scale_x = static_cast<double>(img_size) / matrix.cols;
         double scale_y = static_cast<double>(img_size) / matrix.rows;
 
-        std::cout << "Scale factors: " << scale_x << " x " << scale_y << std::endl;
+        std::cout << "Visualization scale factors: " << scale_x << " x " << scale_y << std::endl;
 
         int pixels_drawn = 0;
 
