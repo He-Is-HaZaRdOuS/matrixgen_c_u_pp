@@ -1,8 +1,8 @@
 # cuMatGen
-TBD...
+GPU-accelerated sparse matrix generator.
 
 # About
-GPU Accelerated Sparse Matrix Generator
+cuMatGen is a C++/CUDA reimplementation of MatGen focused on scalable and parallel sparse matrix generation using CSR data structures.
 
 
 # Disclaimer!
@@ -62,9 +62,13 @@ the executable will be generated inside the respective build-X folder. </br>
 Both presets currently use -O3 flag for host and device code and fast math for device code, debugging is enabled via a macro definition. </br>
 
 ## Running
-To run the test executable, open a terminal window and type </br>
+To run the test executable, open a terminal window in the build directory and type </br>
 ```bash
-./test_real_matrices
+./matgen
 ```
+This command will show the help menu.
 
-Edit the `test_real_matrices.cu` file to include/exclude input matrices and their scaling factors.
+Example command that uses the CUDA backend, specifies the matrix file located under `/data`, the scale factor, the Lanczos sampling factor, and the floating point number threshold, looks like the following:
+```bash
+./matgen cuda bcsstk30.mtx 4 2 1e-6
+```
